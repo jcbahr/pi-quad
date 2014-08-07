@@ -21,7 +21,7 @@
 #define YGYRO 0x45
 #define ZGYRO 0x47
 
-/* These were found by experiment 
+/* These were found by experiment
  * They will differ from chip to chip
  */
 
@@ -40,6 +40,16 @@
 #define ACCEL_SCALE 2   /* 8g */
 
 #define WIDTH 16        /* width of gyro/accel data */
+
+
+/*
+ * *** CONVENTIONS ***
+ *
+ * R x_world = x_craft
+ * The rotation matrix R converts (relative to world) vectors
+ * into (relative to the quadcopter) vectors
+ *
+ */
 
 
 /*********************
@@ -126,7 +136,7 @@ typedef struct Gyro
 double magnitude (Vector v)
 {
     double norm;
-    norm = sqrt (pow(v.x, 2) + pow(v.y, 2) + pow(v.z, 2));
+    norm = sqrt (pow (v.x, 2) + pow (v.y, 2) + pow (v.z, 2));
     return norm;
 }
 
@@ -143,34 +153,98 @@ Vector normalize (Vector v)
     return w;
 }
 
+float quatNorm (Quat q)
+{
+    return sqrt (pow (q.q0, 2) + pow (q.q1, 2) + pow (q.q2, 2) + pow (q.q3, 2));
+}
+
+Quat conjugate (Quat q)
+{
+    Quat p;
+    p.q0 = q.q0;
+    p.q1 = - q.q1;
+    p.q2 = - q.q2;
+    p.q3 = - q.q3;
+    return p;
+}
+
+Quat inverse (Quat q)
+{
+    /* the inverse of a quaternion is its conjugate divided by the norm */
+    Quat p;
+    float norm;
+    p = conjugate (q);
+    norm = quatNorm (q);
+    p.q0 /= norm;
+    p.q1 /= norm;
+    p.q2 /= norm;
+    p.q3 /= norm;
+    return p;
+}
+
+
 
 
 /**********************
  * Rotation Functions *
  **********************/
 
-Quat rotVectorToQuat (Vector v)
+Quat axisAngleToQuat(Vector axis, double angle)
 {
-    /* in a rotation vector, the direction is the axis
-     * and the magnitude represents the angle
-     *
+    /*
      * equation for q found from section 7.3 of
      * "Representing Attitude: Euler Angles, Unit Quaternions,
      * and Rotation Vectors" by James Diebel
      */
-    
-    Quat q;   
-    double norm;
-    Vector dir;
 
-    norm = magnitude(v);
-    dir = normalize(v);
-    q.q0 = cos(norm/2);
-    q.q1 = dir.x * sin(norm/2);
-    q.q2 = dir.y * sin(norm/2);
-    q.q3 = dir.z * sin(norm/2);
+    Quat q;
+
+    axis = normalize(axis);
+    q.q0 = cos (angle / 2);
+    q.q1 = axis.x * sin (angle / 2);
+    q.q2 = axis.y * sin (angle / 2);
+    q.q3 = axis.z * sin (angle / 2);
 
     return q;
+}
+
+Quat rotVectorToQuat (Vector v)
+{
+    /* in a rotation vector, the direction is the axis
+     * and the magnitude represents the angle
+     */
+
+    double norm;
+    norm = magnitude (v);
+
+    return axisAngleToQuat(v, norm);
+}
+
+Quat gravToQuat (Vector g)
+{
+    /* we want to find the quaternion that
+     * rotates -e_3 into the craft's measured gravity vector, g
+     *
+     * g cross (0,0,-1) = (-g2, g1, 0) = |g|*sin(angle)*axis
+     * we find the axis and angle and then convert with rotVectorToQuat
+     */
+
+    Vector crossProd, axis;
+    double angle, sinAngle, norm;
+
+    crossProd.x = -g.y;
+    crossProd.y = g.x;
+    crossProd.z = 0;
+
+    norm = magnitude(g);
+
+    axis.x = crossProd.x / norm;
+    axis.y = crossProd.y / norm;
+    axis.z = crossProd.z / norm;
+
+    sinAngle = magnitude(axis);
+    angle = asin(sinAngle);
+    return axisAngleToQuat(axis, angle);
 }
 
 /******************
@@ -233,7 +307,7 @@ GyroData getGyro (int handle)
  * Accel + Gyro Functions *
  **************************/
 
-Accel bitsToGees(Accel a)
+Accel bitsToGees (Accel a)
 {
     /* convert bits to units of g (9.8 m/s^2)
      * using the accelerometer scale:
@@ -246,15 +320,15 @@ Accel bitsToGees(Accel a)
      * number of bits (size of the "full scale") is #define'd as WIDTH (16 bits)
      * since the MPU6050 uses twos complement, the full scale is +/- 32768
      */
-    
-    a.x *= pow(2, 1+ACCEL_SCALE) / pow(2,WIDTH - 1);
-    a.y *= pow(2, 1+ACCEL_SCALE) / pow(2,WIDTH - 1);
-    a.z *= pow(2, 1+ACCEL_SCALE) / pow(2,WIDTH - 1);
+
+    a.x *= pow (2, 1 + ACCEL_SCALE) / pow (2, WIDTH - 1);
+    a.y *= pow (2, 1 + ACCEL_SCALE) / pow (2, WIDTH - 1);
+    a.z *= pow (2, 1 + ACCEL_SCALE) / pow (2, WIDTH - 1);
 
     return a;
 }
 
-Gyro bitsToRadsPerSec(Gyro g)
+Gyro bitsToRadsPerSec (Gyro g)
 {
     /* convert bits to units of radians per second
      * using the gyroscope scale:
@@ -270,9 +344,9 @@ Gyro bitsToRadsPerSec(Gyro g)
      * 1 degree/second is converted to pi/180 radians/second
      */
 
-    g.x *= 250 / pow(2,(WIDTH-1 - GYRO_SCALE));
-    g.y *= 250 / pow(2,(WIDTH-1 - GYRO_SCALE));
-    g.z *= 250 / pow(2,(WIDTH-1 - GYRO_SCALE));
+    g.x *= 250 / pow (2, (WIDTH - 1 - GYRO_SCALE));
+    g.y *= 250 / pow (2, (WIDTH - 1 - GYRO_SCALE));
+    g.z *= 250 / pow (2, (WIDTH - 1 - GYRO_SCALE));
 
     g.x *= (PI / 180);
     g.y *= (PI / 180);
@@ -298,7 +372,7 @@ Accel adjustedAccel (AccelData a, float temp)
     output.z = a.z - temp * ACCELTEMP_Z;
 
     output = bitsToGees (output);
-    
+
     return output;
 }
 
@@ -389,18 +463,41 @@ Quat initGravity (int handle)
 
     Accel gravity;
     AccelData gravityRaw;
-    Vector gravVector;
+    Vector gravVector, d;
     float temp;
+    Quat q;
 
-    temp = getTemp(handle);
-    gravityRaw = getAccel(handle);
-    gravity = adjustedAccel(gravityRaw, temp);
+    temp = getTemp (handle);
+    gravityRaw = getAccel (handle);
+    gravity = adjustedAccel (gravityRaw, temp);
 
     gravVector.x = gravity.x;
     gravVector.y = gravity.y;
     gravVector.z = gravity.z;
 
-    gravVector = normalize(gravVector);
+    gravVector = normalize (gravVector);
+    printf ("g: %f, %f, %f\n", gravVector.x,
+            gravVector.y, gravVector.z);
+    q = rotVectorToQuat (gravVector);
+    q = inverse (q);
+
+
+    // THIS DOESN'T WORK
+    d.x = 2*(q.q1 * q.q3 - q.q0 * q.q2);
+    d.y = 2*(q.q0 * q.q1 + q.q2 * q.q3);
+    d.z = 2*(pow (q.q0, 2) + pow (q.q3, 2) - 0.5);
+    printf ("d: %f, %f, %f\n", d.x, d.y, d.z);
+
+
+    // THIS WORKS?
+    Vector v;
+    v.x = q.q1 / sqrt(1 - pow(q.q0,2));
+    v.y = q.q2 / sqrt(1 - pow(q.q0,2));
+    v.z = q.q3 / sqrt(1 - pow(q.q0,2));
+    printf("v: %f, %f, %f\n", v.x, v.y, v.z);
+
+
+    
 
     /* TODO:
      * convert gravVector to a unit quaternion
@@ -409,6 +506,8 @@ Quat initGravity (int handle)
      * TODO:
      * figure out if I need gravVector or maybe its negative?
      */
+
+    return q;
 
 
 }
@@ -429,56 +528,72 @@ int main()
     int handle;
     handle = init();
 
-    float temp;
+//    float temp;
+//
+//    Quat q;
+//    Vector v, w;
+//    double norm;
+//
+//    AccelData accelReadings;
+//    Accel a;
+//
+//    temp = getTemp(handle);
+//    accelReadings = getAccel(handle);
+//
+//    a = adjustedAccel(accelReadings, temp);
+//
+//    GyroData gD;
+//    Gyro g;
+//
+//    gD = getGyro(handle);
+//
+//    printf("gD: %d, %d, %d\n", gD.x, gD.y, gD.z);
+//    g = adjustedGyro(gD, temp);
+//    printf("gD: %d, %d, %d\n", gD.x, gD.y, gD.z);
+//    printf("g: %f, %f, %f\n", g.x, g.y, g.z);
+
+    initGravity (handle);
+
+    printf("\n\n\n");
+
+
+    Vector g;
+    g.x = 1;
+    g.y = 1;
+    g.z = -1;
 
     Quat q;
-    Vector v, w;
-    double norm;
-
-    AccelData accelReadings;
-    Accel a;
-    
-    temp = getTemp(handle);
-    accelReadings = getAccel(handle);
-
-    a = adjustedAccel(accelReadings, temp);
-
-    GyroData gD;
-    Gyro g;
-
-    gD = getGyro(handle);
-
-    printf("gD: %d, %d, %d\n", gD.x, gD.y, gD.z);
-    g = adjustedGyro(gD, temp);
-    printf("gD: %d, %d, %d\n", gD.x, gD.y, gD.z);
-    printf("g: %f, %f, %f\n", g.x, g.y, g.z);
+    q = gravToQuat(g);
+    printf("q: %f, %f, %f, %f\n", q);
 
 
 
-    
+    Vector d;
+    d.x = 2*(q.q1 * q.q3 - q.q0 * q.q2);
+    d.y = 2*(q.q0 * q.q1 + q.q2 * q.q3);
+    d.z = 2*(pow (q.q0, 2) + pow (q.q3, 2) - 0.5);
+    printf ("d: %f, %f, %f\n", d.x, d.y, d.z);
 
-
-
-
-/*    while (TRUE)
-    {
-        temp = getTemp(handle);
-        printf ("temp: %f\n", temp);
-        GyroData gyroReadings;
-        AccelData accelReadings;
-        Gyro g;
-        gyroReadings = getGyro (handle);
-        accelReadings = getAccel (handle);
-        g = adjustedGyro(gyroReadings, temp);
-        printf ("gyro x %d y %d z %d\nrealgyro x %f y %f z %f\naccel x %d y %d z %d\n", gyroReadings.x, gyroReadings.y, gyroReadings.z, g.z, g.y, g.z, accelReadings.x, accelReadings.y, accelReadings.z);
-    }
-*/
+    /*    while (TRUE)
+        {
+            temp = getTemp(handle);
+            printf ("temp: %f\n", temp);
+            GyroData gyroReadings;
+            AccelData accelReadings;
+            Gyro g;
+            gyroReadings = getGyro (handle);
+            accelReadings = getAccel (handle);
+            g = adjustedGyro(gyroReadings, temp);
+            printf ("gyro x %d y %d z %d\nrealgyro x %f y %f z %f\naccel x %d y %d z %d\n", gyroReadings.x, gyroReadings.y, gyroReadings.z, g.z, g.y, g.z, accelReadings.x, accelReadings.y, accelReadings.z);
+        }
+    */
 
 
     /* clean up */
     cleanup (handle);
 
 }
+
 
 
 

@@ -231,6 +231,7 @@ Quat gravToQuat (Vector g)
 
     Vector crossProd, axis;
     double angle, sinAngle, norm;
+    double dotProd;
 
     crossProd.x = -g.y;
     crossProd.y = g.x;
@@ -244,7 +245,22 @@ Quat gravToQuat (Vector g)
 
     sinAngle = magnitude(axis);
     angle = asin(sinAngle);
+
+    /* Our angle might be off by pi/2 - x
+     * We determine this by the sign of the dot product
+     */
+    
+    dotProd = -g.z;
+    
+    if (dotProd > 0)
+    {
+        angle = PI - angle;
+    }
+    printf("aNGLE %f\n", angle);
     return axisAngleToQuat(axis, angle);
+
+    
+
 }
 
 /******************
@@ -459,7 +475,9 @@ int init ()
 
 Quat initGravity (int handle)
 {
-    /* returns a quaternion for the gravity vector */
+    /* returns a quaternion that represents
+     * rotating -e3 into the gravity vector
+     */
 
     Accel gravity;
     AccelData gravityRaw;
@@ -475,41 +493,9 @@ Quat initGravity (int handle)
     gravVector.y = gravity.y;
     gravVector.z = gravity.z;
 
-    gravVector = normalize (gravVector);
-    printf ("g: %f, %f, %f\n", gravVector.x,
-            gravVector.y, gravVector.z);
-    q = rotVectorToQuat (gravVector);
-    q = inverse (q);
+    printf("gravRaw: %d, %d, %d\n", gravityRaw.x, gravityRaw.y, gravityRaw.z);
 
-
-    // THIS DOESN'T WORK
-    d.x = 2*(q.q1 * q.q3 - q.q0 * q.q2);
-    d.y = 2*(q.q0 * q.q1 + q.q2 * q.q3);
-    d.z = 2*(pow (q.q0, 2) + pow (q.q3, 2) - 0.5);
-    printf ("d: %f, %f, %f\n", d.x, d.y, d.z);
-
-
-    // THIS WORKS?
-    Vector v;
-    v.x = q.q1 / sqrt(1 - pow(q.q0,2));
-    v.y = q.q2 / sqrt(1 - pow(q.q0,2));
-    v.z = q.q3 / sqrt(1 - pow(q.q0,2));
-    printf("v: %f, %f, %f\n", v.x, v.y, v.z);
-
-
-    
-
-    /* TODO:
-     * convert gravVector to a unit quaternion
-     * via page 17 section 6.12
-     *
-     * TODO:
-     * figure out if I need gravVector or maybe its negative?
-     */
-
-    return q;
-
-
+    return gravToQuat(gravVector);
 }
 
 int cleanup (int handle)
@@ -528,39 +514,27 @@ int main()
     int handle;
     handle = init();
 
-//    float temp;
+    float temp;
 //
 //    Quat q;
 //    Vector v, w;
 //    double norm;
 //
-//    AccelData accelReadings;
-//    Accel a;
-//
-//    temp = getTemp(handle);
-//    accelReadings = getAccel(handle);
-//
-//    a = adjustedAccel(accelReadings, temp);
-//
-//    GyroData gD;
-//    Gyro g;
-//
-//    gD = getGyro(handle);
-//
-//    printf("gD: %d, %d, %d\n", gD.x, gD.y, gD.z);
-//    g = adjustedGyro(gD, temp);
-//    printf("gD: %d, %d, %d\n", gD.x, gD.y, gD.z);
-//    printf("g: %f, %f, %f\n", g.x, g.y, g.z);
+    AccelData accelReadings;
+    Accel a;
 
-    initGravity (handle);
+    temp = getTemp(handle);
+    accelReadings = getAccel(handle);
 
-    printf("\n\n\n");
+    a = adjustedAccel(accelReadings, temp);
+    printf("a: %d, %d, %d\n", accelReadings.x, accelReadings.y, accelReadings.z);
+    printf("adj: %f, %f, %f\n", a.x, a.y, a.z);
 
 
     Vector g;
-    g.x = 1;
-    g.y = 1;
-    g.z = -1;
+    g.x = 0.0000000001;
+    g.y = 0.0000000001;
+    g.z = 1;
 
     Quat q;
     q = gravToQuat(g);
@@ -569,6 +543,16 @@ int main()
 
 
     Vector d;
+    d.x = 2*(q.q1 * q.q3 - q.q0 * q.q2);
+    d.y = 2*(q.q0 * q.q1 + q.q2 * q.q3);
+    d.z = 2*(pow (q.q0, 2) + pow (q.q3, 2) - 0.5);
+    printf ("d: %f, %f, %f\n", d.x, d.y, d.z);
+
+
+    printf("\n\n\n");
+    q = initGravity(handle);
+    q = inverse(q);
+    printf("q: %f, %f, %f, %f\n",q);
     d.x = 2*(q.q1 * q.q3 - q.q0 * q.q2);
     d.y = 2*(q.q0 * q.q1 + q.q2 * q.q3);
     d.z = 2*(pow (q.q0, 2) + pow (q.q3, 2) - 0.5);

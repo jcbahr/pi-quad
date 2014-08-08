@@ -488,12 +488,13 @@ Quat initGravity (int handle)
     temp = getTemp (handle);
     gravityRaw = getAccel (handle);
     gravity = adjustedAccel (gravityRaw, temp);
-
+    
     gravVector.x = gravity.x;
     gravVector.y = gravity.y;
     gravVector.z = gravity.z;
 
-    printf("gravRaw: %d, %d, %d\n", gravityRaw.x, gravityRaw.y, gravityRaw.z);
+    printf("g: %f, %f, %f\n", gravVector);
+    printf("g: %f, %f, %f\n", normalize(gravVector));
 
     return gravToQuat(gravVector);
 }
@@ -515,11 +516,16 @@ int main()
     handle = init();
 
     float temp;
+
+    Vector g, d;
+    Quat q;
 //
 //    Quat q;
 //    Vector v, w;
 //    double norm;
 //
+
+    /*
     AccelData accelReadings;
     Accel a;
 
@@ -542,14 +548,14 @@ int main()
 
 
 
-    Vector d;
     d.x = 2*(q.q1 * q.q3 - q.q0 * q.q2);
     d.y = 2*(q.q0 * q.q1 + q.q2 * q.q3);
     d.z = 2*(pow (q.q0, 2) + pow (q.q3, 2) - 0.5);
     printf ("d: %f, %f, %f\n", d.x, d.y, d.z);
-
-
     printf("\n\n\n");
+
+    */
+
     q = initGravity(handle);
     q = inverse(q);
     printf("q: %f, %f, %f, %f\n",q);

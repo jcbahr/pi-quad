@@ -165,7 +165,7 @@ Vector cross (Vector u, Vector v)
     return w;
 }
 
-Vector scalarMult(Vector v, Scalar s)
+Vector scalarMult(Vector v, double s)
 {
     v.x *= s;
     v.y *= s;
@@ -189,6 +189,7 @@ float quatNorm (Quat q)
 
 Quat quatNormalize (Quat q)
 {
+    double norm;
     norm = quatNorm (q);
     q.q0 /= norm;
     q.q1 /= norm;
@@ -548,14 +549,14 @@ int main()
 
     Vector d, e; // grav, error
     Vector a, w; // accel, ang. vel
-    Vector I, wpr // integral, new ang. vel
+    Vector I, wpr; // integral, new ang. vel
     Quat q;
 
     AccelData accel;
     GyroData gyro;
 
     float temp;
-    float dt, halfdt;
+    double dt, halfdt;
 
     q = initGravity(handle);
 

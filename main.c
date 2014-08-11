@@ -41,6 +41,9 @@
 
 #define WIDTH 16        /* width of gyro/accel data */
 
+#define K_I (0)
+#define K_P (5)
+
 
 /*
  * *** CONVENTIONS ***
@@ -153,9 +156,45 @@ Vector normalize (Vector v)
     return w;
 }
 
+Vector cross (Vector u, Vector v)
+{
+    Vector w;
+    w.x = u.y * v.z - u.z * v.y;
+    w.y = u.z * v.x - u.x * v.z;
+    w.z = u.x * v.y - u.y * v.x;
+    return w;
+}
+
+Vector scalarMult(Vector v, Scalar s)
+{
+    v.x *= s;
+    v.y *= s;
+    v.z *= s;
+    return v;
+}
+
+Vector VectorAdd(Vector v, Vector u)
+{
+    Vector w;
+    w.x = v.x + u.x;
+    w.y = v.y + u.y;
+    w.z = v.z + u.z;
+    return w;
+}
+
 float quatNorm (Quat q)
 {
     return sqrt (pow (q.q0, 2) + pow (q.q1, 2) + pow (q.q2, 2) + pow (q.q3, 2));
+}
+
+Quat quatNormalize (Quat q)
+{
+    norm = quatNorm (q);
+    q.q0 /= norm;
+    q.q1 /= norm;
+    q.q2 /= norm;
+    q.q3 /= norm;
+    return q;
 }
 
 Quat conjugate (Quat q)
@@ -181,6 +220,7 @@ Quat inverse (Quat q)
     p.q3 /= norm;
     return p;
 }
+
 
 
 
@@ -256,7 +296,6 @@ Quat gravToQuat (Vector g)
     {
         angle = PI - angle;
     }
-    printf("aNGLE %f\n", angle);
     return axisAngleToQuat(axis, angle);
 
     
@@ -323,7 +362,7 @@ GyroData getGyro (int handle)
  * Accel + Gyro Functions *
  **************************/
 
-Accel bitsToGees (Accel a)
+Vector bitsToGees (Vector a)
 {
     /* convert bits to units of g (9.8 m/s^2)
      * using the accelerometer scale:
@@ -344,7 +383,7 @@ Accel bitsToGees (Accel a)
     return a;
 }
 
-Gyro bitsToRadsPerSec (Gyro g)
+Vector bitsToRadsPerSec (Vector g)
 {
     /* convert bits to units of radians per second
      * using the gyroscope scale:
@@ -379,10 +418,10 @@ Gyro bitsToRadsPerSec (Gyro g)
  * The adjusted values are meant to approximate 0°C values
  */
 
-Accel adjustedAccel (AccelData a, float temp)
+Vector adjustedAccel (AccelData a, float temp)
 {
     /* temperature must be provided in celsius */
-    Accel output;
+    Vector output;
     output.x = a.x - temp * ACCELTEMP_X;
     output.y = a.y - temp * ACCELTEMP_Y;
     output.z = a.z - temp * ACCELTEMP_Z;
@@ -392,12 +431,12 @@ Accel adjustedAccel (AccelData a, float temp)
     return output;
 }
 
-Gyro adjustedGyro (GyroData g, float temp)
+Vector adjustedGyro (GyroData g, float temp)
 {
     /* val = c + dt */
 
     /* temperature must be provided in celsius */
-    Gyro output;
+    Vector output;
     output.x = g.x - GYROBIAS_X;
     output.y = g.y - GYROBIAS_Y;
     output.z = g.z - GYROBIAS_Z;
@@ -479,9 +518,8 @@ Quat initGravity (int handle)
      * rotating -e3 into the gravity vector
      */
 
-    Accel gravity;
     AccelData gravityRaw;
-    Vector gravVector, d;
+    Vector gravity, d;
     float temp;
     Quat q;
 
@@ -489,14 +527,7 @@ Quat initGravity (int handle)
     gravityRaw = getAccel (handle);
     gravity = adjustedAccel (gravityRaw, temp);
     
-    gravVector.x = gravity.x;
-    gravVector.y = gravity.y;
-    gravVector.z = gravity.z;
-
-    printf("g: %f, %f, %f\n", gravVector);
-    printf("g: %f, %f, %f\n", normalize(gravVector));
-
-    return gravToQuat(gravVector);
+    return gravToQuat(gravity);
 }
 
 int cleanup (int handle)
@@ -515,68 +546,64 @@ int main()
     int handle;
     handle = init();
 
+    Vector d, e; // grav, error
+    Vector a, w; // accel, ang. vel
+    Vector I, wpr // integral, new ang. vel
+    Quat q;
+
+    AccelData accel;
+    GyroData gyro;
+
     float temp;
-
-    Vector g, d;
-    Quat q;
-//
-//    Quat q;
-//    Vector v, w;
-//    double norm;
-//
-
-    /*
-    AccelData accelReadings;
-    Accel a;
-
-    temp = getTemp(handle);
-    accelReadings = getAccel(handle);
-
-    a = adjustedAccel(accelReadings, temp);
-    printf("a: %d, %d, %d\n", accelReadings.x, accelReadings.y, accelReadings.z);
-    printf("adj: %f, %f, %f\n", a.x, a.y, a.z);
-
-
-    Vector g;
-    g.x = 0.0000000001;
-    g.y = 0.0000000001;
-    g.z = 1;
-
-    Quat q;
-    q = gravToQuat(g);
-    printf("q: %f, %f, %f, %f\n", q);
-
-
-
-    d.x = 2*(q.q1 * q.q3 - q.q0 * q.q2);
-    d.y = 2*(q.q0 * q.q1 + q.q2 * q.q3);
-    d.z = 2*(pow (q.q0, 2) + pow (q.q3, 2) - 0.5);
-    printf ("d: %f, %f, %f\n", d.x, d.y, d.z);
-    printf("\n\n\n");
-
-    */
+    float dt, halfdt;
 
     q = initGravity(handle);
-    q = inverse(q);
-    printf("q: %f, %f, %f, %f\n",q);
-    d.x = 2*(q.q1 * q.q3 - q.q0 * q.q2);
-    d.y = 2*(q.q0 * q.q1 + q.q2 * q.q3);
-    d.z = 2*(pow (q.q0, 2) + pow (q.q3, 2) - 0.5);
-    printf ("d: %f, %f, %f\n", d.x, d.y, d.z);
 
-    /*    while (TRUE)
-        {
-            temp = getTemp(handle);
-            printf ("temp: %f\n", temp);
-            GyroData gyroReadings;
-            AccelData accelReadings;
-            Gyro g;
-            gyroReadings = getGyro (handle);
-            accelReadings = getAccel (handle);
-            g = adjustedGyro(gyroReadings, temp);
-            printf ("gyro x %d y %d z %d\nrealgyro x %f y %f z %f\naccel x %d y %d z %d\n", gyroReadings.x, gyroReadings.y, gyroReadings.z, g.z, g.y, g.z, accelReadings.x, accelReadings.y, accelReadings.z);
-        }
-    */
+    while (TRUE)
+    {
+        // Step 1: Measure w and a
+
+        temp = getTemp(handle);
+        accel = getAccel(handle);
+        gyro = getGyro(handle);
+
+        a = adjustedAccel(accel, temp);
+        w = adjustedGyro(gyro, temp);
+
+        // Step 2: Normalize a
+
+        a = normalize(a);
+
+        // Step 3: Get estimated gravity vector d from quat q
+
+        d.x = 2*(q.q0*q.q2 - q.q1*q.q3);
+        d.y = 2*(q.q2*q.q3 - q.q0*q.q1);
+        d.z = 2*(pow (q.q0, 2) + pow (q.q3, 2) - 0.5);
+
+        // Step 4: Calculate error vector e
+        // (Cross between estimated and measured gravity)
+
+        e = cross(a, d);
+
+        // Step 5: Calculate I term
+        
+        I = VectorAdd(I, scalarMult(e, K_I * dt));
+
+        // Step 6: Calculate P term
+
+        wpr = VectorAdd(w, VectorAdd(scalarMult(e, K_P), I));
+
+        // Step 7: Integrate rate of change with qdot = 0.5q tensor wpr
+        
+        halfdt = 0.5 * dt;
+        q.q0 += halfdt * (-q.q1 * wpr.x - q.q2 * wpr.y - q.q3 * wpr.z);
+        q.q1 += halfdt * (q.q0 * wpr.x + q.q2 * wpr.z - q.q3 * wpr.y);
+        q.q2 += halfdt * (q.q0 * wpr.y - q.q1 * wpr.z + q.q3 * wpr.x);
+        q.q3 += halfdt * (q.q0 * wpr.z + q.q0 * wpr.y - q.q2 * wpr.x);
+
+        
+        q = quatNormalize(q);
+    }
 
 
     /* clean up */

@@ -1,8 +1,32 @@
 #include <stdio.h>
 #include <pigpio.h>
 #include <math.h>
+/*
+ *  main.c
+ *  pi-quad
+ *  Raspberry Pi based quadcopter flight controller
+ *  Uses the MPU-6050 for temperature, accelerometer,
+ *    and gyroscope measurements
+ *
+ *  Real-time programming tidbits from the preempt rt wiki
+ */
+
+
 #include <assert.h>
 #include <unistd.h>
+
+#include <stdlib.h>
+#include <time.h>
+#include <sched.h>
+#include <sys/mman.h>
+#include <string.h>
+
+/* Real-time #defines */
+#define MY_PRIORITY (80)    /* above kernel RT */
+#define MAX_SAFE_STACK (8*1024) /* max stack size which is guaranteed
+                                   safe to access without faulting */
+#define NSEC_PER_SEC (1000000000) /* number of nanoseconds per second */
+
 
 #define TRUE 1
 #define FALSE 0
@@ -53,6 +77,17 @@
  * into (relative to the quadcopter) vectors
  *
  */
+
+/***********************
+ * Real-time functions *
+ ***********************/
+
+void stack_prefault(void)
+{
+    unsigned char dummy[MAX_SAFE_STACK];
+    memset(dummy, 0, MAX_SAFE_STACK);
+    return;
+}
 
 
 /*********************
@@ -457,7 +492,7 @@ Vector adjustedGyro (GyroData g, float temp)
 
 
 /*****************
- * Configuration *
+ * Config + Init *
  *****************/
 
 int gyroConfig (int handle)
@@ -487,10 +522,6 @@ int accelConfig (int handle)
     val = ACCEL_SCALE << 3;
     return i2cWriteByteData (handle, ACCEL_CONFIG, val);
 }
-
-/*****************
- * Main function *
- *****************/
 
 int init ()
 {
@@ -537,12 +568,53 @@ int cleanup (int handle)
 }
 
 
+/*****************
+ * Main function *
+ *****************/
+
 int main()
 {
+    /***** Real-time setup *****/
+
+    struct timespec t;
+    struct sched_param param;
+    /* reading 36 bits takes 360 us (clock is 100 kHz)
+     * 16 for gyro + 16 for accel + 4 error checking
+     * Give ourselves an extra 640 us for computation
+     * Total: 1 ms
+     *
+     * This can be changed!
+     */
+    int interval = 1000000; /* 1 ms = 1000 us */
+
+    /* declare self as real time task */
+
+    param.sched_priority = MY_PRIORITY;
+    if (sched_setscheduler(0, SCHED_FIFO, &param) == -1)
+    {
+        perror("sched_setscheduler failed");
+        exit(-1);
+    }
+
+    /* lock memory*/
+
+    if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1)
+    {
+        perror("mlockall failed");
+        exit(-2);
+    }
+
+    /* pre-fault stack */
+
+    stack_prefault();
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    
+    /* start after one second */
+
+    t.tv_sec++;
 
 
     /* initialize and configure */
-
 
     int handle;
     handle = init();
@@ -557,11 +629,20 @@ int main()
 
     float temp;
     double dt, halfdt;
+    dt = 0.001;
+    halfdt = 0.0005;
 
     q = initGravity(handle);
 
+    /* main loop */
+
     while (TRUE)
     {
+        /* wait until next shot */
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &t, NULL);
+
+        /* calculate q from gyro and accel input */
+
         // Step 1: Measure w and a
 
         temp = getTemp(handle);
@@ -602,8 +683,17 @@ int main()
         q.q2 += halfdt * (q.q0 * wpr.y - q.q1 * wpr.z + q.q3 * wpr.x);
         q.q3 += halfdt * (q.q0 * wpr.z + q.q0 * wpr.y - q.q2 * wpr.x);
 
-        
         q = quatNormalize(q);
+        printf("q: %f, %f, %f, %f\n", q.q0, q.q1, q.q2, q.q3);
+       // printf("%d\n", t.tv_nsec);
+
+        /* calculate next shot */
+        t.tv_nsec += interval;
+        while (t.tv_nsec >= NSEC_PER_SEC)
+        {
+            t.tv_nsec -= NSEC_PER_SEC;
+            t.tv_sec++;
+        }
     }
 
 

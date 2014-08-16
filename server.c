@@ -1,49 +1,38 @@
-/*
- * UDP Socket programming taken from
- * http://www.abc.se/~m6695/udp.html
+/* UDP server code taken from:
+ * http://www.cs.ucsb.edu/~almeroth/classes/W01.176B/hw2/examples/udp-server.c
  */
 
-
-#include <arpa/inet.h>
+#include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdio.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include <strings.h>
 
-#define BUFLEN 512
-#define NPACK 10
-#define PORT 9930
+#define PORT 12547
+#define TRUE 1
+#define FALSE 0
+#define MESG_SIZE 15
 
-void diep(char *s)
+int main(int argc, char**argv)
 {
-    perror(s);
-    exit(1);
-}
+    int sockfd, n;
+    struct sockaddr_in servaddr, cliaddr;
+    socklen_t len;
+    char mesg[MESG_SIZE];
 
-int main(void)
-{
-    struct sockaddr_in si_me, si_other;
-    int s, i, slen=sizeof(si_other);
-    char buf[BUFLEN];
-    if ((s=socket(AF_INET, SOCK_DGRAM, 0)) == -1)
-        diep("socket");
+    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
-    memset((char *) &si_me, 0, sizeof(si_me));
-    si_me.sin_family = AF_INET;
-    si_me.sin_port = htons(PORT);
-    si_me.sin_addr.s_addr = htonl(INADDR_ANY);
-    if (bind(s, &si_me, sizeof(si_me)) == -1)
-        diep("bind");
+    bzero(&servaddr, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    servaddr.sin_port = htons(PORT);
+    bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
 
-    for (i = 0; i < NPACK; i++)
+    while(TRUE)
     {
-        if (recvfrom(s, buf, BUFLEN, 0, &si_other, &slen) == -1)
-            diep("recvfrom()");
-        printf("Received packet from %s:%d\nData: %s\n\n",
-                inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port), buf);
+        len = sizeof(cliaddr);
+        n = recvfrom(sockfd, mesg, MESG_SIZE, 0, (struct sockaddr *) &cliaddr, &len);
+        //sendto(sockfd, mesg, n, 0, (struct sockaddr *)&cliaddr, sizeof(cliaddr));
+        mesg[n] = 0;
+        printf("%s\n", mesg);
     }
-    
-    close(s);
-    return 0;
 }

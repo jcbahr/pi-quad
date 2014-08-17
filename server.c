@@ -37,6 +37,7 @@ JoystickData * setupMem()
     id = shmget (key, sizeof(JoystickData), IPC_CREAT | SHM_W | SHM_R);
 
     jPtr = shmat(id, NULL, 0);
+    return jPtr;
 }
 
 void cleanupMem(JoystickData * jPtr)
@@ -60,7 +61,7 @@ int main(int argc, char**argv)
     servaddr.sin_port = htons(PORT);
     bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
 
-    jData = * setupMem();
+    jData = *setupMem();
 
     while(TRUE)
     {
@@ -68,8 +69,10 @@ int main(int argc, char**argv)
         n = recvfrom(sockfd, mesg, MESG_SIZE, 0, (struct sockaddr *) &cliaddr, &len);
         //sendto(sockfd, mesg, n, 0, (struct sockaddr *)&cliaddr, sizeof(cliaddr));
         mesg[n] = 0;
-        sscanf(mesg, "%d: %d", jData.axis, jData.value);
+        sscanf(mesg, "%d: %d", &jData.axis, &jData.value);
         printf("%s\n", mesg);
         printf("%d: %d\n", jData.axis, jData.value);
     }
+
+    cleanupMem(&jData);
 }

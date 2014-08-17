@@ -30,17 +30,16 @@ typedef struct JoystickData
 JoystickData * setupMem()
 {
     int id;
-    JoystickData * jData;
+    JoystickData * jPtr;
     id = shmget (IPC_PRIVATE, MESG_SIZE, IPC_CREAT | SHM_W | SHM_R);
 
-    jData = shmat(id, NULL, 0);
+    jPtr = shmat(id, NULL, 0);
 }
 
-void cleanupMem(JoystickData * jData)
+void cleanupMem(JoystickData * jPtr)
 {
-    shmdt(jData);
+    shmdt(jPtr);
 }
-
 
 int main(int argc, char**argv)
 {
@@ -48,6 +47,7 @@ int main(int argc, char**argv)
     struct sockaddr_in servaddr, cliaddr;
     socklen_t len;
     char mesg[MESG_SIZE];
+    JoystickData jData;
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -56,6 +56,8 @@ int main(int argc, char**argv)
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port = htons(PORT);
     bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+
+    jData = * setupMem();
 
     while(TRUE)
     {

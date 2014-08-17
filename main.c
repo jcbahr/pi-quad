@@ -83,6 +83,69 @@
  *
  */
 
+/*********************
+ * Useful structures *
+ *********************/
+
+typedef struct JoystickData
+{
+    int axis;
+    int value;
+} JoystickData;
+
+typedef struct Quat
+{
+    double q0, q1, q2, q3;
+} Quat;
+
+typedef struct Vector
+{
+    double x, y, z;
+} Vector;
+
+typedef struct AccelData
+{
+    int x, y, z;
+} AccelData;
+
+typedef struct GyroData
+{
+    int x, y, z;
+} GyroData;
+
+typedef struct Accel
+{
+    float x, y, z;
+} Accel;
+
+typedef struct Gyro
+{
+    float x, y, z;
+} Gyro;
+
+
+/*****************
+ * Shared Memory *
+ *****************/
+
+JoystickData * setupMem()
+{
+    int id;
+    key_t key;
+    JoystickData * jPtr;
+
+    key = ftok("/home/jackson/.ipc/ipc_file", 'R');
+    id = shmget(key, sizeof(JoystickData), IPC_CREAT | SHM_W | SHM_R);
+
+    jPtr = shmat(id, NULL, 0);
+}
+
+void cleanupMem(JoystickData * jPtr)
+{
+    shmdt(jPtr);
+}
+
+
 /***********************
  * Real-time functions *
  ***********************/
@@ -137,40 +200,6 @@ int signedToInt (unsigned int number, int width)
     }
 }
 
-
-/*********************
- * Useful structures *
- *********************/
-
-typedef struct Quat
-{
-    double q0, q1, q2, q3;
-} Quat;
-
-typedef struct Vector
-{
-    double x, y, z;
-} Vector;
-
-typedef struct AccelData
-{
-    int x, y, z;
-} AccelData;
-
-typedef struct GyroData
-{
-    int x, y, z;
-} GyroData;
-
-typedef struct Accel
-{
-    float x, y, z;
-} Accel;
-
-typedef struct Gyro
-{
-    float x, y, z;
-} Gyro;
 
 /********************
  * Vector Functions *

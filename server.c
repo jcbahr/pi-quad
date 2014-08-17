@@ -30,8 +30,11 @@ typedef struct JoystickData
 JoystickData * setupMem()
 {
     int id;
+    key_t key;
     JoystickData * jPtr;
-    id = shmget (IPC_PRIVATE, MESG_SIZE, IPC_CREAT | SHM_W | SHM_R);
+
+    key = ftok("/home/jackson/.ipc/ipc_file", 'R');
+    id = shmget (key, sizeof(JoystickData), IPC_CREAT | SHM_W | SHM_R);
 
     jPtr = shmat(id, NULL, 0);
 }
@@ -65,6 +68,8 @@ int main(int argc, char**argv)
         n = recvfrom(sockfd, mesg, MESG_SIZE, 0, (struct sockaddr *) &cliaddr, &len);
         //sendto(sockfd, mesg, n, 0, (struct sockaddr *)&cliaddr, sizeof(cliaddr));
         mesg[n] = 0;
+        sscanf(mesg, "%d: %d", jData.axis, jData.value);
         printf("%s\n", mesg);
+        printf("%d: %d\n", jData.axis, jData.value);
     }
 }

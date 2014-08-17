@@ -21,6 +21,11 @@
 #include <sys/mman.h>
 #include <string.h>
 
+/* shared memory */
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
 /* Real-time #defines */
 #define MY_PRIORITY (80)    /* above kernel RT */
 #define MAX_SAFE_STACK (8*1024) /* max stack size which is guaranteed

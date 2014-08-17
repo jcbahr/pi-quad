@@ -2,15 +2,45 @@
  * http://www.cs.ucsb.edu/~almeroth/classes/W01.176B/hw2/examples/udp-server.c
  */
 
+/* UDP */
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <strings.h>
 
+/* shared memory */
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+
 #define PORT 12547
 #define TRUE 1
 #define FALSE 0
 #define MESG_SIZE 15
+
+
+typedef struct JoystickData
+{
+    int axis;
+    int value;
+} JoystickData;
+
+
+
+JoystickData * setupMem()
+{
+    int id;
+    JoystickData * jData;
+    id = shmget (IPC_PRIVATE, MESG_SIZE, IPC_CREAT | SHM_W | SHM_R);
+
+    jData = shmat(id, NULL, 0);
+}
+
+void cleanupMem(JoystickData * jData)
+{
+    shmdt(jData);
+}
+
 
 int main(int argc, char**argv)
 {

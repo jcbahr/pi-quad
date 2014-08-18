@@ -14,6 +14,7 @@
 
 #include <assert.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <stdlib.h>
 #include <time.h>
@@ -128,22 +129,60 @@ typedef struct Gyro
  * Shared Memory *
  *****************/
 
-JoystickData * setupMem()
+int allocateMem()
 {
-    int id;
+    int shmid;
     key_t key;
+
+    key = ftok("/home/jackson/quadcopter/.ipc/ipc_file", 'R');
+    if (key == -1)
+    {
+        perror("ftok");
+    }
+    shmid = shmget(key, sizeof(JoystickData), IPC_CREAT|IPC_EXCL|0600);
+    if (shmid == -1)
+    {
+        printf("Shared memory seg exists - opening as client\n");
+        shmid = shmget(key, sizeof(JoystickData), 0);
+        if (shmid == -1)
+        {
+            perror("shmget");
+            return;
+        }
+    }
+
+    return shmid;
+}
+
+JoystickData * attachMem(int id)
+{
     JoystickData * jPtr;
 
-    key = ftok("/home/jackson/.ipc/ipc_file", 'R');
-    id = shmget(key, sizeof(JoystickData), IPC_CREAT | SHM_W | SHM_R);
-
-    jPtr = shmat(id, NULL, 0);
+    if ((jPtr = (JoystickData *)shmat(id, NULL, 0)) == (JoystickData *)-1)
+    {
+        perror("shmat");
+        return;
+    }
+    return jPtr;
 }
 
-void cleanupMem(JoystickData * jPtr)
+void detachMem(JoystickData * jPtr)
 {
-    shmdt(jPtr);
+    if (shmdt(jPtr) == -1)
+    {
+        perror("shmdt");
+    }
 }
+
+void deallocateMem(int id)
+{
+    if (shmctl(id, IPC_RMID, NULL) == -1)
+    {
+        perror("shmctl");
+    }
+}
+
+
 
 
 /***********************
@@ -608,6 +647,29 @@ int cleanup (int handle)
 
 int main()
 {
+    /* joystick setup */
+    JoystickData * joyPtr;
+    int shmid;
+
+    shmid = allocateMem();
+    joyPtr = attachMem(shmid);
+
+
+    char sendline[1000];
+    while (fgets(sendline, 10000, stdin) != NULL)
+    {
+        printf("%d: %d\n", joyPtr->axis, joyPtr->value);
+        sscanf(sendline, "%d: %d", &(joyPtr->axis), &(joyPtr->value));
+    }
+
+    detachMem(joyPtr);
+
+}
+
+
+int NOTmain()
+{
+
     /***** Real-time setup *****/
 
     struct timespec t;

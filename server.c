@@ -13,6 +13,8 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 
+#include <errno.h>
+
 #define PORT 12547
 #define TRUE 1
 #define FALSE 0
@@ -27,23 +29,59 @@ typedef struct JoystickData
 
 
 
-JoystickData * setupMem()
+int allocateMem()
 {
-    int id;
+    int shmid;
     key_t key;
+
+    key = ftok("/home/jackson/quadcopter/.ipc/ipc_file", 'R');
+    if (key == -1)
+    {
+        perror("ftok");
+    }
+    shmid = shmget(key, sizeof(JoystickData), IPC_CREAT|IPC_EXCL|0600);
+    if (shmid == -1)
+    {
+        printf("Shared memory seg exists - opening as client\n");
+        shmid = shmget(key, sizeof(JoystickData), 0);
+        if (shmid == -1)
+        {
+            perror("shmget");
+            return;
+        }
+    }
+
+    return shmid;
+}
+
+JoystickData * attachMem(int id)
+{
     JoystickData * jPtr;
 
-    key = ftok("/home/jackson/.ipc/ipc_file", 'R');
-    id = shmget (key, sizeof(JoystickData), IPC_CREAT | SHM_W | SHM_R);
-
-    jPtr = shmat(id, NULL, 0);
+    if ((jPtr = (JoystickData *)shmat(id, NULL, 0)) == (JoystickData *)-1)
+    {
+        perror("shmat");
+    }
     return jPtr;
 }
 
-void cleanupMem(JoystickData * jPtr)
+void detachMem(JoystickData * jPtr)
 {
-    shmdt(jPtr);
+    if (shmdt(jPtr) == -1)
+    {
+        perror("shmdt");
+    }
 }
+
+void deallocateMem(int id)
+{
+    if (shmctl(id, IPC_RMID, NULL) == -1)
+    {
+        perror("shmctl");
+    }
+}
+
+
 
 int main(int argc, char**argv)
 {
@@ -51,7 +89,9 @@ int main(int argc, char**argv)
     struct sockaddr_in servaddr, cliaddr;
     socklen_t len;
     char mesg[MESG_SIZE];
-    JoystickData jData;
+
+    JoystickData * joyPtr;
+    int shmid;
 
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -61,18 +101,29 @@ int main(int argc, char**argv)
     servaddr.sin_port = htons(PORT);
     bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
 
-    jData = *setupMem();
+    shmid = allocateMem();
+    joyPtr = attachMem(shmid);
 
+    /*
     while(TRUE)
     {
         len = sizeof(cliaddr);
         n = recvfrom(sockfd, mesg, MESG_SIZE, 0, (struct sockaddr *) &cliaddr, &len);
-        //sendto(sockfd, mesg, n, 0, (struct sockaddr *)&cliaddr, sizeof(cliaddr));
-        mesg[n] = 0;
-        sscanf(mesg, "%d: %d", &jData.axis, &jData.value);
+        mesg[n] = '\0';
+        printf("before: %d: %d\n", joyPtr->axis, joyPtr->value);
+        sscanf(mesg, "%d: %d", &(joyPtr->axis), &(joyPtr->value));
         printf("%s\n", mesg);
-        printf("%d: %d\n", jData.axis, jData.value);
+        printf("after: %d: %d\n", joyPtr->axis, joyPtr->value);
+    }
+    */ 
+
+    char sendline[1000];
+    while (fgets(sendline, 10000, stdin) != NULL)
+    {
+        printf("%d: %d\n", joyPtr->axis, joyPtr->value);
+        sscanf(sendline, "%d: %d", &(joyPtr->axis), &(joyPtr->value));
     }
 
-    cleanupMem(&jData);
+    detachMem(joyPtr);
+    deallocateMem(shmid);
 }
